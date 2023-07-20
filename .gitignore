@@ -6,8 +6,13 @@
 .idea/
 *.iml
 
+# Enviroment variable
+.env
+
 # Vscode files
 .vscode
+
+.backend/upload/*
 
 # Binaries for programs and plugins
 *.exe
