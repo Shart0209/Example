@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 )
 
 type custom struct {
@@ -74,7 +73,7 @@ func (c *custom) saveUploadedFile(resp *http.Response, filename string) error {
 	return err
 }
 
-func (c *custom) startUpload(url string, name int, g *errgroup.Group) error {
+func (c *custom) startDownload(url string, g *errgroup.Group) error {
 	resp, err := getResponse(&url)
 	if err != nil {
 		return err
@@ -88,8 +87,6 @@ func (c *custom) startUpload(url string, name int, g *errgroup.Group) error {
 	tag := [2]string{"aside .detail__actions .detail__download .selection-download-wrapper button", "data-href"}
 	link := c.parseDoc(doc, &tag, true)
 
-	res := make(chan string)
-
 	if link != "" {
 		g.Go(func() error {
 
@@ -99,36 +96,20 @@ func (c *custom) startUpload(url string, name int, g *errgroup.Group) error {
 			}
 			defer r.Body.Close()
 
-			name += 1
-			fl := fmt.Sprintf("%v.jpg", name)
+			fl := fmt.Sprintf("%s.jpg", filepath.Base(link))
 			if err := c.saveUploadedFile(r, fl); err != nil {
 				return err
 			}
 
-			select {
-			case <-c.ctx.Done():
-				close(res)
-				return nil
-			default:
-				res <- fmt.Sprintf("save file %v is done", fl)
-				close(res)
-			}
 			return nil
 		})
 	}
-
-	select {
-	case <-c.ctx.Done():
-		return nil
-	case out := <-res:
-		fmt.Printf("goroutines: %v - %s\n", name, out)
-		return nil
-	}
+	return nil
 }
 
 func (c *custom) start() error {
 
-	c.query = flag.String("q", "dog", "Query name")       //get args
+	c.query = flag.String("q", "cat", "Query name")       //get args
 	c.limit = flag.Int("l", 5, "limit to download photo") //get args
 
 	//с url скачивается не более 10 фото
@@ -191,16 +172,27 @@ func main() {
 	g, ctx := errgroup.WithContext(context.Background())
 	c.ctx = ctx
 
-	for i, url := range c.links {
-		time.Sleep(100 * time.Millisecond)
+	ch := make(chan string, len(c.links))
+	for i := range c.links {
+		ch <- c.links[i]
+	}
+	close(ch)
+
+	for i := 0; i < 2; i++ {
 		g.Go(func() error {
-			if err := c.startUpload(url, i, g); err != nil {
-				return err
+			for url := range ch {
+				select {
+				case <-ctx.Done():
+					return nil
+				default:
+				}
+
+				if err := c.startDownload(url, g); err != nil {
+					return err
+				}
 			}
 			return nil
-
 		})
-		time.Sleep(100 * time.Millisecond)
 	}
 
 	if err := g.Wait(); err != nil {
