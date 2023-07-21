@@ -16,6 +16,7 @@ import (
 )
 
 type custom struct {
+	ctx     context.Context
 	baseURL string
 	limit   *int
 	query   *string
@@ -87,6 +88,8 @@ func (c *custom) startUpload(url string, name int, g *errgroup.Group) error {
 	tag := [2]string{"aside .detail__actions .detail__download .selection-download-wrapper button", "data-href"}
 	link := c.parseDoc(doc, &tag, true)
 
+	res := make(chan string)
+
 	if link != "" {
 		g.Go(func() error {
 
@@ -96,23 +99,37 @@ func (c *custom) startUpload(url string, name int, g *errgroup.Group) error {
 			}
 			defer r.Body.Close()
 
-			fl := fmt.Sprintf("%v.jpg", name+1)
+			name += 1
+			fl := fmt.Sprintf("%v.jpg", name)
 			if err := c.saveUploadedFile(r, fl); err != nil {
 				return err
 			}
 
+			select {
+			case <-c.ctx.Done():
+				close(res)
+				return nil
+			default:
+				res <- fmt.Sprintf("save file %v is done", fl)
+				close(res)
+			}
 			return nil
 		})
-		time.Sleep(120 * time.Millisecond)
 	}
 
-	return nil
+	select {
+	case <-c.ctx.Done():
+		return nil
+	case out := <-res:
+		fmt.Printf("goroutines: %v - %s\n", name, out)
+		return nil
+	}
 }
 
 func (c *custom) start() error {
 
 	c.query = flag.String("q", "dog", "Query name")       //get args
-	c.limit = flag.Int("l", 2, "limit to download photo") //get args
+	c.limit = flag.Int("l", 5, "limit to download photo") //get args
 
 	//с url скачивается не более 10 фото
 	c.baseURL = fmt.Sprintf("https://ru.freepik.com/search?format=search&query=%s&type=photo", *c.query)
@@ -171,7 +188,8 @@ func main() {
 	tag := [2]string{".list-content .showcase .showcase__item .showcase__content a", "href"}
 	_ = c.parseDoc(doc, &tag, false)
 
-	g, _ := errgroup.WithContext(context.Background())
+	g, ctx := errgroup.WithContext(context.Background())
+	c.ctx = ctx
 
 	for i, url := range c.links {
 		time.Sleep(100 * time.Millisecond)
