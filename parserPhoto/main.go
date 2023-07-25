@@ -110,9 +110,9 @@ func (c *custom) startDownload(url string, g *errgroup.Group) error {
 func (c *custom) start() error {
 
 	c.query = flag.String("q", "cat", "Query name")       //get args
-	c.limit = flag.Int("l", 5, "limit to download photo") //get args
+	c.limit = flag.Int("l", 3, "limit to download photo") //get args
 
-	//с url скачивается не более 10 фото
+	//с url скачивается не более 3 фото в день
 	c.baseURL = fmt.Sprintf("https://ru.freepik.com/search?format=search&query=%s&type=photo", *c.query)
 	c.links = make([]string, 0, *c.limit)
 	c.path = filepath.Join("upload", *c.query)
